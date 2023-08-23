@@ -66,7 +66,6 @@ extern const AVFilter ff_af_anlmdn;
 extern const AVFilter ff_af_anlmf;
 extern const AVFilter ff_af_anlms;
 extern const AVFilter ff_af_anull;
-extern const AVFilter ff_af_aoverlay;
 extern const AVFilter ff_af_apad;
 extern const AVFilter ff_af_aperms;
 extern const AVFilter ff_af_aphaser;
