@@ -25,7 +25,6 @@
 #include "avfilter.h"
 #include "filters.h"
 #include "internal.h"
-#include "formats.h"
 
 typedef struct FrameRingBuffer {
     uint8_t *extended_data_buffer;
@@ -560,22 +559,34 @@ static int config_output(AVFilterLink *outlink)
 
     s->nb_channels = outlink->ch_layout.nb_channels;
 
-    s->cf0 = av_malloc_array(s->nb_channels, sizeof(uint8_t*));
-    s->cf1 = av_malloc_array(s->nb_channels, sizeof(uint8_t*));
+    s->cf0 = av_calloc(s->nb_channels, sizeof(uint8_t*));
+    if (!s->cf0)
+        return AVERROR(ENOMEM);
+
+    s->cf1 = av_calloc(s->nb_channels, sizeof(uint8_t*));
+    if (!s->cf1)
+        return AVERROR(ENOMEM);
 
     ring_buffer_size = SEGMENT_SIZE + SEGMENT_SIZE * (1 + ((s->cf_samples - 1) / SEGMENT_SIZE));
 
-    s->main_sample_buffers = av_malloc_array(s->nb_channels, sizeof(FrameRingBuffer*));
+    s->main_sample_buffers = av_calloc(s->nb_channels, sizeof(FrameRingBuffer*));
+    if (!s->main_sample_buffers)
+        return AVERROR(ENOMEM);
+
     for (int i = 0; i < s->nb_channels; i++) {
-        s->cf0[i] = av_malloc_array(s->cf_samples, size);
+        s->cf0[i] = av_calloc(s->cf_samples, size);
+        if (!s->cf0[i])
+            return AVERROR(ENOMEM);
         ret = ring_init(&s->main_sample_buffers[i], ring_buffer_size, size);
         if (ret < 0)
             return ret;
     }
 
-    s->overlay_sample_buffers = av_malloc_array(s->nb_channels, sizeof(FrameRingBuffer*));
+    s->overlay_sample_buffers = av_calloc(s->nb_channels, sizeof(FrameRingBuffer*));
     for (int i = 0; i < s->nb_channels; i++) {
-        s->cf1[i] = av_malloc_array(s->cf_samples, size);
+        s->cf1[i] = av_calloc(s->cf_samples, size);
+        if (!s->cf1[i])
+            return AVERROR(ENOMEM);
         ret = ring_init(&s->overlay_sample_buffers[i], ring_buffer_size, size);
         if (ret < 0)
             return ret;
@@ -584,18 +595,18 @@ static int config_output(AVFilterLink *outlink)
     return 0;
 }
 
-static const AVFilterPad avfilter_af_aoverlay_inputs[] = {
+static const AVFilterPad af_aoverlay_inputs[] = {
     {
         .name = "main",
         .type = AVMEDIA_TYPE_AUDIO,
     },
     {
-        .name = "s->overlay_input",
+        .name = "overlay_input",
         .type = AVMEDIA_TYPE_AUDIO,
     },
 };
 
-static const AVFilterPad avfilter_af_aoverlay_outputs[] = {
+static const AVFilterPad af_aoverlay_outputs[] = {
     {
         .name           = "default",
         .type           = AVMEDIA_TYPE_AUDIO,
@@ -611,8 +622,8 @@ const AVFilter ff_af_aoverlay = {
     .activate       = activate,
     .init           = init,
     .uninit         = uninit,
-    FILTER_INPUTS(avfilter_af_aoverlay_inputs),
-    FILTER_OUTPUTS(avfilter_af_aoverlay_outputs),
+    FILTER_INPUTS(af_aoverlay_inputs),
+    FILTER_OUTPUTS(af_aoverlay_outputs),
     FILTER_SAMPLEFMTS_ARRAY(sample_fmts),
     .flags          = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL,
 };
