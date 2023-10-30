@@ -66,13 +66,11 @@ static const enum AVSampleFormat sample_fmts[] = {
 };
 
 #define SEGMENT_SIZE 1024
-
 #define OFFSET(x) offsetof(AOverlayContext, x)
-
 #define FLAGS AV_OPT_FLAG_AUDIO_PARAM | AV_OPT_FLAG_FILTERING_PARAM
 
 static const AVOption aoverlay_options[] = {
-    { "cf_duration",    "set duration (in seconds) for cross fade between the inputs", OFFSET(cf_duration),    AV_OPT_TYPE_DURATION,   {.i64 = 100000}, 0,  60000000,   FLAGS },
+    { "cf_duration",    "set duration for cross fade between the inputs", OFFSET(cf_duration),    AV_OPT_TYPE_DURATION,   {.i64 = 100000}, 0,  60000000,   FLAGS },
     { NULL }
 };
 
