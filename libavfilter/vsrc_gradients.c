@@ -75,13 +75,14 @@ static const AVOption gradients_options[] = {
     {"seed",      "set the seed",   OFFSET(seed),          AV_OPT_TYPE_INT64,      {.i64=-1},        -1, UINT32_MAX, FLAGS },
     {"duration",  "set video duration", OFFSET(duration),  AV_OPT_TYPE_DURATION,   {.i64=-1},        -1, INT64_MAX, FLAGS },
     {"d",         "set video duration", OFFSET(duration),  AV_OPT_TYPE_DURATION,   {.i64=-1},        -1, INT64_MAX, FLAGS },
-    {"speed",     "set gradients rotation speed", OFFSET(speed), AV_OPT_TYPE_FLOAT,{.dbl=0.01}, 0.00001, 1, FLAGS },
-    {"type",      "set gradient type", OFFSET(type),       AV_OPT_TYPE_INT,        {.i64=0},          0, 3, FLAGS, "type" },
-    {"t",         "set gradient type", OFFSET(type),       AV_OPT_TYPE_INT,        {.i64=0},          0, 3, FLAGS, "type" },
-    {"linear",    "set gradient type",            0,       AV_OPT_TYPE_CONST,      {.i64=0},          0, 0, FLAGS, "type" },
-    {"radial",    "set gradient type",            0,       AV_OPT_TYPE_CONST,      {.i64=1},          0, 0, FLAGS, "type" },
-    {"circular",  "set gradient type",            0,       AV_OPT_TYPE_CONST,      {.i64=2},          0, 0, FLAGS, "type" },
-    {"spiral",    "set gradient type",            0,       AV_OPT_TYPE_CONST,      {.i64=3},          0, 0, FLAGS, "type" },
+    {"speed",     "set gradients rotation speed", OFFSET(speed), AV_OPT_TYPE_FLOAT,{.dbl=0.01},       0, 1, FLAGS },
+    {"type",      "set gradient type", OFFSET(type),       AV_OPT_TYPE_INT,        {.i64=0},          0, 4, FLAGS, "type" },
+    {"t",         "set gradient type", OFFSET(type),       AV_OPT_TYPE_INT,        {.i64=0},          0, 4, FLAGS, "type" },
+    { "linear",   "set linear gradient",          0,       AV_OPT_TYPE_CONST,      {.i64=0},          0, 0, FLAGS, "type" },
+    { "radial",   "set radial gradient",          0,       AV_OPT_TYPE_CONST,      {.i64=1},          0, 0, FLAGS, "type" },
+    { "circular", "set circular gradient",        0,       AV_OPT_TYPE_CONST,      {.i64=2},          0, 0, FLAGS, "type" },
+    { "spiral",   "set spiral gradient",          0,       AV_OPT_TYPE_CONST,      {.i64=3},          0, 0, FLAGS, "type" },
+    { "square",   "set square gradient",          0,       AV_OPT_TYPE_CONST,      {.i64=4},          0, 0, FLAGS, "type" },
     {NULL},
 };
 
@@ -219,6 +220,9 @@ static float project(float origin_x, float origin_y,
     case 3:
         od_s_q = M_PI * 2.f;
         break;
+    case 4:
+        od_s_q = fmaxf(fabsf(od_x), fabsf(od_y));
+        break;
     }
 
     switch (type) {
@@ -234,6 +238,9 @@ static float project(float origin_x, float origin_y,
     case 3:
         op_x_od = fmodf(atan2f(op_x, op_y) + M_PI + point_x / fmaxf(origin_x, dest_x), 2.f * M_PI);
         break;
+    case 4:
+        op_x_od = fmaxf(fabsf(op_x), fabsf(op_y));
+        break;
     }
 
     // Normalize and clamp range.
@@ -248,14 +255,14 @@ static int draw_gradients_slice(AVFilterContext *ctx, void *arg, int job, int nb
     const int height = frame->height;
     const int start = (height *  job   ) / nb_jobs;
     const int end   = (height * (job+1)) / nb_jobs;
-    const int linesize = frame->linesize[0] / 4;
+    const ptrdiff_t linesize = frame->linesize[0] / 4;
     uint32_t *dst = (uint32_t *)frame->data[0] + start * linesize;
     const int type = s->type;
 
     for (int y = start; y < end; y++) {
         for (int x = 0; x < width; x++) {
             float factor = project(s->fx0, s->fy0, s->fx1, s->fy1, x, y, type);
-            dst[x] = lerp_colors(s->color_rgba, s->nb_colors, s->nb_colors + (type >= 2), factor);
+            dst[x] = lerp_colors(s->color_rgba, s->nb_colors, s->nb_colors + (type >= 2 && type <= 3), factor);
         }
 
         dst += linesize;
@@ -272,14 +279,14 @@ static int draw_gradients_slice16(AVFilterContext *ctx, void *arg, int job, int 
     const int height = frame->height;
     const int start = (height *  job   ) / nb_jobs;
     const int end   = (height * (job+1)) / nb_jobs;
-    const int linesize = frame->linesize[0] / 8;
+    const ptrdiff_t linesize = frame->linesize[0] / 8;
     uint64_t *dst = (uint64_t *)frame->data[0] + start * linesize;
     const int type = s->type;
 
     for (int y = start; y < end; y++) {
         for (int x = 0; x < width; x++) {
             float factor = project(s->fx0, s->fy0, s->fx1, s->fy1, x, y, type);
-            dst[x] = lerp_colors16(s->color_rgba, s->nb_colors, s->nb_colors + (type >= 2), factor);
+            dst[x] = lerp_colors16(s->color_rgba, s->nb_colors, s->nb_colors + (type >= 2 && type <= 3), factor);
         }
 
         dst += linesize;
@@ -296,10 +303,10 @@ static int draw_gradients_slice32_planar(AVFilterContext *ctx, void *arg, int jo
     const int height = frame->height;
     const int start = (height *  job   ) / nb_jobs;
     const int end   = (height * (job+1)) / nb_jobs;
-    const int linesize_g = frame->linesize[0] / 4;
-    const int linesize_b = frame->linesize[1] / 4;
-    const int linesize_r = frame->linesize[2] / 4;
-    const int linesize_a = frame->linesize[3] / 4;
+    const ptrdiff_t linesize_g = frame->linesize[0] / 4;
+    const ptrdiff_t linesize_b = frame->linesize[1] / 4;
+    const ptrdiff_t linesize_r = frame->linesize[2] / 4;
+    const ptrdiff_t linesize_a = frame->linesize[3] / 4;
     float *dst_g = (float *)frame->data[0] + start * linesize_g;
     float *dst_b = (float *)frame->data[1] + start * linesize_b;
     float *dst_r = (float *)frame->data[2] + start * linesize_r;
@@ -309,7 +316,7 @@ static int draw_gradients_slice32_planar(AVFilterContext *ctx, void *arg, int jo
     for (int y = start; y < end; y++) {
         for (int x = 0; x < width; x++) {
             float factor = project(s->fx0, s->fy0, s->fx1, s->fy1, x, y, type);
-            lerp_colors32(s->color_rgbaf, s->nb_colors, s->nb_colors + (type >= 2), factor,
+            lerp_colors32(s->color_rgbaf, s->nb_colors, s->nb_colors + (type >= 2 && type <= 3), factor,
                           &dst_r[x], &dst_g[x], &dst_b[x], &dst_a[x]);
         }
 
@@ -384,7 +391,7 @@ static int activate(AVFilterContext *ctx)
 
     if (ff_outlink_frame_wanted(outlink)) {
         AVFrame *frame = ff_get_video_buffer(outlink, s->w, s->h);
-        float angle = fmodf(s->pts * s->speed, 2.f * M_PI);
+        float angle = (s->speed > 0.f) ? fmodf(s->pts * s->speed, 2.f * M_PI) : 1.f;
         const float w2 = s->w / 2.f;
         const float h2 = s->h / 2.f;
 

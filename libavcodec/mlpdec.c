@@ -93,14 +93,6 @@ typedef struct SubStream {
 
     /// Bitmask of which parameter sets are conveyed in a decoding parameter block.
     uint8_t     param_presence_flags;
-#define PARAM_BLOCKSIZE     (1 << 7)
-#define PARAM_MATRIX        (1 << 6)
-#define PARAM_OUTSHIFT      (1 << 5)
-#define PARAM_QUANTSTEP     (1 << 4)
-#define PARAM_FIR           (1 << 3)
-#define PARAM_IIR           (1 << 2)
-#define PARAM_HUFFOFFSET    (1 << 1)
-#define PARAM_PRESENCE      (1 << 0)
     //@}
 
     //@{
@@ -230,9 +222,9 @@ static av_cold void init_static(void)
         static VLCElem vlc_buf[3 * VLC_STATIC_SIZE];
         huff_vlc[i].table           = &vlc_buf[i * VLC_STATIC_SIZE];
         huff_vlc[i].table_allocated = VLC_STATIC_SIZE;
-        init_vlc(&huff_vlc[i], VLC_BITS, 18,
+        vlc_init(&huff_vlc[i], VLC_BITS, 18,
                  &ff_mlp_huffman_tables[i][0][1], 2, 1,
-                 &ff_mlp_huffman_tables[i][0][0], 2, 1, INIT_VLC_USE_NEW_STATIC);
+                 &ff_mlp_huffman_tables[i][0][0], 2, 1, VLC_INIT_USE_STATIC);
     }
 
     ff_mlp_init_crc();
@@ -314,6 +306,23 @@ FF_DISABLE_DEPRECATION_WARNINGS
     }
 FF_ENABLE_DEPRECATION_WARNINGS
 #endif
+
+    if (m->downmix_layout.nb_channels) {
+        if (!av_channel_layout_compare(&m->downmix_layout, &(AVChannelLayout)AV_CHANNEL_LAYOUT_STEREO) ||
+            !av_channel_layout_compare(&m->downmix_layout, &(AVChannelLayout)AV_CHANNEL_LAYOUT_STEREO_DOWNMIX)) {
+            av_channel_layout_uninit(&avctx->ch_layout);
+            avctx->ch_layout = (AVChannelLayout)AV_CHANNEL_LAYOUT_STEREO;
+        } else if (!av_channel_layout_compare(&m->downmix_layout, &(AVChannelLayout)AV_CHANNEL_LAYOUT_5POINT0)) {
+            av_channel_layout_uninit(&avctx->ch_layout);
+            avctx->ch_layout = (AVChannelLayout)AV_CHANNEL_LAYOUT_5POINT0;
+        } else if (!av_channel_layout_compare(&m->downmix_layout, &(AVChannelLayout)AV_CHANNEL_LAYOUT_5POINT1)) {
+            av_channel_layout_uninit(&avctx->ch_layout);
+            avctx->ch_layout = (AVChannelLayout)AV_CHANNEL_LAYOUT_5POINT1;
+        }
+        else
+          av_log(avctx, AV_LOG_WARNING, "Invalid downmix layout\n");
+    }
+
     ff_thread_once(&init_static_once, init_static);
 
     return 0;
@@ -391,6 +400,7 @@ static int read_major_sync(MLPDecodeContext *m, GetBitContext *gb)
     m->access_unit_size_pow2 = mh.access_unit_size_pow2;
 
     m->num_substreams        = mh.num_substreams;
+    m->extended_substream_info = mh.extended_substream_info;
     m->substream_info        = mh.substream_info;
 
     /*  If there is a 4th substream and the MSB of substream_info is set,
@@ -398,7 +408,7 @@ static int read_major_sync(MLPDecodeContext *m, GetBitContext *gb)
      */
     if (m->avctx->codec_id == AV_CODEC_ID_TRUEHD
             && m->num_substreams == 4 && m->substream_info >> 7 == 1) {
-        m->avctx->profile     = FF_PROFILE_TRUEHD_ATMOS;
+        m->avctx->profile     = AV_PROFILE_TRUEHD_ATMOS;
     }
 
     /* limit to decoding 3 substreams, as the 4th is used by Dolby Atmos for non-audio data */
@@ -459,7 +469,10 @@ static int read_major_sync(MLPDecodeContext *m, GetBitContext *gb)
             else
                 m->substream[2].mask = mh.channel_layout_thd_stream1;
         if (m->avctx->ch_layout.nb_channels > 2)
-            m->substream[mh.num_substreams > 1].mask = mh.channel_layout_thd_stream1;
+            if (mh.num_substreams > 2)
+                m->substream[1].mask = mh.channel_layout_thd_stream1;
+            else
+                m->substream[mh.num_substreams > 1].mask = mh.channel_layout_thd_stream2;
     }
 
     m->needs_reordering = mh.channel_arrangement >= 18 && mh.channel_arrangement <= 20;
