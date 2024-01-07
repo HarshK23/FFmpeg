@@ -76,7 +76,8 @@ fate-filter-amerge: CMD = framecrc -i $(SRC) -i $(SRC) -filter_complex "[0:a][1:
 FATE_AFILTER-$(call FILTERDEMDECENCMUX, AOVERLAY, WAV, PCM_S16LE, PCM_S16LE, WAV) += fate-filter-aoverlay
 fate-filter-aoverlay: tests/data/asynth-44100-1.wav
 fate-filter-aoverlay: SRC = $(TARGET_PATH)/tests/data/asynth-44100-1.wav
-fate-filter-aoverlay: CMD = framecrc -i $(SRC) -i $(SRC) -filter_complex "aoverlay=enable='\''between\(t,2,3\)'\''"
+# fate-filter-aoverlay: SRC = /Users/harshitkarwal/Downloads/1.nut
+fate-filter-aoverlay: CMD = framecrc -i $(SRC) -i $(SRC) -auto_conversion_filters -filter_complex "aoverlay=enable='\''between\(t,2,3\)'\''"
 
 FATE_AFILTER-$(call FILTERDEMDECENCMUX, APAD, WAV, PCM_S16LE, PCM_S16LE, WAV) += fate-filter-apad
 fate-filter-apad: tests/data/asynth-44100-2.wav
